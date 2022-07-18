@@ -1,0 +1,51 @@
+server:
+    port: 8082 # TODO usar env_var
+spring:
+    security.user: # Necessário ao habilitar TokenRelay
+        name: demo
+        password: demo123
+    application:
+        name: api-gateway # TODO usar env_var
+    cloud:
+        actuator.verbose.enabled: true # TODO usar env_var. Detalhes do actuator, indicado false em ambiente produtivo
+        gateway:
+            globalcors: # Cors config https://docs.spring.io/spring-cloud-gateway/docs/3.1.3/reference/html/#cors-configuration
+                cors-configurations:
+                    "[/**]":
+                        allowedOrigins: "*"
+                        allowedMethods: "*"
+            httpclient:
+                connect-timeout: 30000 # timeout em milliseconds
+                response-timeout: 30s # timeout em java.time.Duration
+            ssl:
+                useInsecureTrustManager: true # Para producao utilizar cert.pem https://docs.spring.io/spring-cloud-gateway/docs/3.1.3/reference/html/#tls-and-ssl
+            default-filters:
+                - RemoveRequestHeader=Cookie # Remove headers sensiveis
+                - TokenRelay= # encaminha token jwt para downstream.
+                - name: Retry # executa retries nos serviços downstream.
+                  args:
+                      retries: 5 # número de retries
+                      series: SERVER_ERROR # série 5XX
+                      methods: GET # método http
+                      backoff:
+                          firstBackoff: 30ms # delay até primeiro retry
+                          maxBackoff: 200ms # delay máximo somando todos retries
+                          factor: 2
+                          basedOnPreviousValue: false
+            routes:
+                - id: google # id da rota
+                  uri: "https://www.google.com.br" # backend que SCG irá chamar
+                  predicates: Path=/google/** # caminho exposto pelo SCG
+                - id: yahoo
+                  uri: "https://www.yahoo.com"
+                  predicates: Path=/yahoo/**
+logging:
+    level:
+        org:
+            springframework.cloud.gateway: TRACE # alterar em PRD
+        web: TRACE # alterar em PRD
+management:
+    endpoint:
+        gateway.enabled: true # adiciona gateway ao actuator
+    endpoints:
+        web.exposure.include: "*" # expoe todos os endpoints do actuator
